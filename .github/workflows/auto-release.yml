@@ -28,30 +28,28 @@ jobs:
           draft: false
           prerelease: true
 
-  release_assets_amd64:
-    name: Release assets for AMD64
+  release_assets_native:
+    name: Build native executables
     needs: create_release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-18.04
             file: ./target/release/mcl-installer
-            strip: true
             args: --features rustls
             release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-linux-amd64
 
           - os: macos-latest
             file: ./target/release/mcl-installer
-            strip: true
             args: --features native-tls
             release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-macos-amd64
 
           - os: windows-latest
             file: ./target/release/mcl-installer.exe
-            strip: false
             args: --features native-tls
             release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-windows-amd64.exe
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
@@ -73,7 +71,7 @@ jobs:
         uses: svenstaro/upx-action@v2
         with:
           file: ${{ matrix.file }}
-          strip: ${{ matrix.strip }}
+          strip: false
           args: --best --lzma
 
       - name: Upload release assets
@@ -86,32 +84,60 @@ jobs:
           asset_path: ${{ matrix.file }}
           asset_content_type: application/octet-stream
 
-  release_assets_arm:
-    name: Release assets for ARM
+  release_assets_cross:
+    name: Build cross-compile executables
     needs: create_release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
+            file: mcl-installer
             args: --features rustls
             target: aarch64-unknown-linux-gnu
             release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-linux-aarch64
 
           - os: ubuntu-latest
+            file: mcl-installer
             args: --features rustls
             target: aarch64-linux-android
             release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-android-aarch64
 
           - os: ubuntu-latest
+            file: mcl-installer
             args: --features rustls
             target: arm-unknown-linux-gnueabi
             release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-linux-arm
 
           - os: ubuntu-latest
+            file: mcl-installer
             args: --features rustls
             target: arm-linux-androideabi
             release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-android-arm
+
+          - os: ubuntu-latest
+            file: mcl-installer
+            args: --features rustls
+            target: aarch64-unknown-linux-musl
+            release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-linux-aarch64-musl
+
+          - os: ubuntu-latest
+            file: mcl-installer
+            args: --features rustls
+            target: x86_64-unknown-linux-musl
+            release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-linux-amd64-musl
+
+          - os: ubuntu-latest
+            file: mcl-installer
+            args: --features rustls
+            target: arm-unknown-linux-musleabi
+            release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-linux-arm-musl
+
+          - os: windows-latest
+            file: mcl-installer.exe
+            args: --features native-tls
+            target: i686-pc-windows-msvc
+            release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-windows-x86.exe
 
     steps:
       - name: Checkout code
@@ -135,9 +161,49 @@ jobs:
       - name: Compress binaries
         uses: svenstaro/upx-action@v2
         with:
-          file: ./target/${{ matrix.target }}/release/mcl-installer
+          file: ./target/${{ matrix.target }}/release/${{ matrix.file }}
           strip: false
           args: --best --lzma
+
+      - name: Upload release assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          asset_name: ${{ matrix.release_name }}
+          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.file }}
+          asset_content_type: application/octet-stream
+
+  release_assets_aarch64_macos:
+    name: Release assets for Apple Silicon
+    needs: create_release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            args: --features native-tls
+            target: aarch64-apple-darwin
+            release_name: mcl-installer-${{ needs.create_release.outputs.commit_id }}-macos-aarch64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Install Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          target: ${{ matrix.target }}
+
+      - name: Build MCL Installer
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: ${{ matrix.args }} --release --target ${{ matrix.target }}
 
       - name: Upload release assets
         uses: actions/upload-release-asset@v1

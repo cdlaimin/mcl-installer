@@ -3,6 +3,7 @@ mod aoe;
 use self::aoe::AbortOnError;
 
 use std::collections::HashMap;
+use std::fmt::format;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -14,9 +15,9 @@ use reqwest::{Client, Error, Response};
 use serde::Deserialize;
 use zip::ZipArchive;
 
-const MIRAI_REPO: &str = "https://repo.itxtech.org";
+const MIRAI_REPO: &str = "mirai.mamoe.net/assets/mcl";
 
-const PROG_VERSION: &str = "1.0.4";
+const PROG_VERSION: &str = "1.0.7";
 
 fn get_os() -> &'static str {
     #[cfg(target_os = "windows")]
@@ -165,6 +166,9 @@ fn exec(cmd: &mut Command, msg: &str) {
 async fn main() {
     self::aoe::register();
 
+    let args = std::env::args().nth(1);
+    let repo = if args.is_none() { MIRAI_REPO.to_string() } else { args.unwrap().to_string() };
+
     println!("iTXTech MCL Installer {} [OS: {}]", PROG_VERSION, get_os());
     println!("Licensed under GNU AGPLv3.");
     println!("https://github.com/iTXTech/mcl-installer");
@@ -203,9 +207,9 @@ async fn main() {
             let _ = fs::remove_dir_all("java");
         }
 
-        print!("Java version (8-17, default: 11): ");
+        print!("Java version (11, 17, 18), default: 17): ");
         let mut ver = str_to_int(&read_line());
-        ver = if (8..=17).contains(&ver) { ver } else { 11 };
+        ver = if (11..=20).contains(&ver) { ver } else { 17 };
 
         print!("JRE or JDK (1: JRE, 2: JDK, default: JRE): ");
         let jre = if str_to_int(&read_line()) == 2 {
@@ -222,15 +226,14 @@ async fn main() {
             a.trim()
         };
 
-        println!("Fetching file list for {} version {} on {}", jre, ver, arch);
-
         let url = format!(
-            "https://mirrors.tuna.tsinghua.edu.cn/AdoptOpenJDK/{}/{}/{}/{}/",
+            "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/{}/{}/{}/{}/",
             ver,
             jre,
             arch,
             get_os()
         );
+        println!("Fetching file list for {} version {} on {} from {}", jre, ver, arch, url);
         let resp = get(&client, &url)
             .await
             .aoe_msg("Fail to fetch AdoptOpenJDK download list");
@@ -325,7 +328,7 @@ async fn main() {
         println!();
     }
 
-    let manifest_url = format!("{}/org/itxtech/mcl/package.json", MIRAI_REPO);
+    let manifest_url = format!("https://{}/org/itxtech/mcl/package.json", repo);
     println!("Fetching iTXTech MCL Package Info from {}", manifest_url);
     let manifest = get(&client, &manifest_url)
         .await
